@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="">
+
+<head>
+    <title>支付网关</title>
+    <meta charset=utf-8>
+    <meta name=description content="光网-LightNet 网络 私有网络  网络销售 VPN network">
+    <meta name=keyword content="光网-LightNet 网络 私有网络 网络销售  VPN network">
+    <meta http-equiv=X-UA-Compatible content="IE=edge">
+    <meta name=viewport content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
+    <meta name=format-detection content="telephone=no">
+    <meta name=x5-orientation content=portrait>
+    <meta name=screen-orientation content=portrait>
+    <meta name=orientation content=portrait>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vant@2.10/lib/index.css" />
+    <style>
+        .qr-wrapper {
+            width: 100%;
+            height: 100%;
+            margin: 20px auto 0 auto;
+            text-align: center;
+            position: fixed;
+        }
+
+        .qr-wrapper canvas {
+            display: inline-block;
+        }
+
+        .qr-wrapper .pay-info {
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .qr-wrapper.color-error,
+        .qr-wrapper .color-info {
+            padding: 10px 0;
+        }
+
+        .qr-wrapper .ifr-trigger {
+            width: 100%;
+            min-height: 600px;
+        }
+
+        .payment-select .van-radio {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .payment-select .van-cell__value{
+            display: flex;
+            justify-content: flex-end;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app" class="qr-wrapper">
+        <van-loading v-if="loading" type="spinner" color="#1989fa" ></van-loading>
+        <div v-if="showSelectPayment">
+            支付方式 {{payment}}
+            <van-cell-group style="margin-top: 20px;" class="payment-select">
+                <van-radio-group v-model="payment" @change="onSelectPayment" >
+                    <van-cell title="比特币" value="Bapp" label="扫码支付">
+                        <van-radio name="bapp">BApp</van-radio>
+                    </van-cell>
+                    <!--van-cell title="比特币" value="Bapp" label="扫码支付">
+                        <van-radio name="bit">Bapp</van-radio>
+                    </van-cell-->
+                </van-radio-group>
+
+            </van-cell-group>
+        </div>
+      
+        <div v-else>
+            <div v-if="hostingUrl" id="showiframe">
+                <!--iframe name="ifr" id="ifr" :src="hostingUrl" width="100%" :height="viewHeight" minHeight="500px"
+                    style="min-height: 500px;" frameborder="0" border="0" marginwidth="0" marginheight="0"
+                    scrolling="yes" allowtransparency="yes"></iframe-->
+
+            </div>
+            <!-- qrcode -->
+            <div v-if="qrcode" class="qrcode">
+                <div class="pay-info">
+                    <van-row>
+                        <van-col :span="7" class="align-left"> 商品: </van-col>
+                        <van-col :span="17" class="align-left">
+                            {{ query.name }}
+                        </van-col>
+                    </van-row>
+                    <van-row>
+                        <van-col :span="7" class="align-left"> 支付id: </van-col>
+                        <van-col :span="17" class="align-left">
+                            {{ query.orderId }}
+                        </van-col>
+                    </van-row>
+                    <van-row>
+                        <van-col :span="7" class="align-left"> 支付金额: </van-col>
+                        <van-col :span="17" class="align-left">
+                            {{ query.price }}
+                        </van-col>
+                    </van-row>
+                </div>
+                <p v-if="status == 2">
+                    <van-count-down :time="expireAt * 1000">
+                        <template v-slot:default="{ minutes, seconds }">
+                            请在<span
+                                style="font-size: 24px; color: red; padding: 0 5px;">{{ minutes }}:{{ seconds }}</span>完成支付
+                        </template>
+                    </van-count-down>
+                </p>
+                <div>
+                    <div v-if="status == 2">
+                        <canvas id="qrcode" height="200" width="200" style="height: 200px; width: 200px;"> </canvas>
+                    </div>
+                    <div v-if="status == 0" class="color-error font-size24">
+                        <span>支付失败</span>
+                    </div>
+                    <div v-if="status == 4" class="color-error font-size24">
+                        <span>支付过期</span>
+                    </div>
+                    <div v-if="status == 2" class="color-info font-size24">
+                        <span>支付中</span>
+                    </div>
+                    <div v-if="status == 1" class="color-info">
+                        支付完成
+                    </div>
+                </div>
+                <div @click="download" v-html="'下载'"></div>
+            </div>
+        </div>
+
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.6/dist/vue.min.js" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vant@2.10/lib/vant.min.js" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@0.20.0/dist/axios.min.js" type="text/javascript"></script>
+    <script src="/public/js/util.js"></script>
+    <script>
+        (() => {
+            console.log(">>>>>>>>>>>>>>", util);
+            Vue.use(vant);
+            let vm = new Vue({
+                el: '#app',
+                data: {
+                    showSelectPayment: true,
+                    loading: false,
+                    hostingUrl: '',
+                    payment: '',
+                    show: false,
+                    status: 2,
+                    expireAt: 15 * 60,
+                    _pidStatus: 0,
+                    target: '',
+                    qrcode: '',
+                    viewHeight: 600,
+                },
+                components: {},
+                mounted() {
+                    let height = window.innerHeight;
+                    this.viewHeight = height;
+                   // document.querySelector('.qr-wrapper').style.height = height+'px';
+                    //document.querySelector('.qr-wrapper').style.height = window.innerHeight+'px';
+                    this.payment = this.query.payment || this.payment;
+                    console.log(">>>>>>>>payment", this.payment);
+                },
+                beforeDestroy() {
+                    console.log('离开支付页面');
+                    clearTimeout(this._pidStatus);
+                    this._pidStatus = -1;
+                },
+                methods: {
+                    onSelectPayment() {
+                        if (this.payment == this.query.payment) return;
+                        this.createPayment(this.payment);
+                    },
+                    /** 创建支付通道 */
+                    async createPayment(payment) {
+                        this.showSelectPayment = false;
+                        let payId = this.query.payId;
+                        this.loading = true;
+                        console.log(">>>>>>>>>>>>");
+                        let v = await axios({
+                            url: 'https://api.client.light-network.net/api/app/pay/create',
+                            //url: 'http://127.0.0.1:8081/api/app/pay/create',
+                            data: { payId: payId, payment: payment },
+                            method: 'POST',
+                        }).catch(err => {
+                            console.error("创建失败", err.message)
+                            this.showSelectPayment = true;
+                            this.loading = false;
+                        });
+                        console.log('....result', v);
+                        let { code, msg, data } = v.data;
+                        this.loading = false;
+                        console.log("code", code, data);
+                        if (code == 200) {
+                            //this.target = data.target;
+                            //this.qrCode = data.qrCode;
+                            this.query.payment = this.payment;
+                            this.hostingUrl = data.targetUrl;
+                            //this.buildQrcode(this.qrCode);
+                            util.showIframe(data.targetUrl, 'showiframe')
+                        } else {
+                            vant.Toast.fail(msg);
+                            this.showSelectPayment = true;
+                        }
+
+
+                        //location.search += "&payment=" + this.payment;
+                        //this.payUrl= this.$config.paymentPage(data);
+                    },
+                    /** 生成二维码 */
+                    buildQrcode(value) {
+                        let _this = this;
+                        let ele = document.querySelector('#qrcode');
+                        //<iframe :src="value" style="display: none;" />
+                        console.log("ele", ele, value)
+                        if (/(android|iPhone)/i.test(navigator.userAgent)) download(this.query.url)//.dispatchEvent('click');
+                        QRCode.toCanvas(ele, value, function (err) {
+                            if (err) {
+                                _this.$analytics.trackError('生成qrode错误' + err.message);
+                                return _this.$Message.warning(err.message);
+                            }
+                            setTimeout(() => (_this.status = 4), _this.expireAt * 1000);
+
+                            /*         var ifr = document.createElement('iframe');
+                            ifr.src = 'value';
+                            ifr.className = 'ifr-trigger';
+                            ifr.onload = () => {
+                              setTimeout(() => document.body.removeChild(ifr), 2000);
+                            };
+                            document.body.appendChild(ifr); */
+                        });
+                        let endTime = this.expireAt * 1000 + Date.now();
+
+                        (function checkStatus() {
+                            if (_this._pidStatus < 0 || Date.now() > endTime) return;
+                            _this._pidStatus = setTimeout(async () => {
+                                let data = await _this.getStatus(_this.orderId); //20080715583527810020000
+                                //data.status = 4;
+                                //_this.status =  _this.status != 2 ?  _this.status : data.status;
+                                if (data.status == 1) {
+                                    //支付完成
+                                    _this.overTime = 5;
+                                    _this.$emit('on-payok');
+                                } else if (data.status == 2) {
+                                    if (_this._pidStatus < 0) return;
+                                    //支付中
+                                    checkStatus();
+                                } else {
+                                    _this.status = data.status;
+                                    _this.$emit('on-payFail');
+                                }
+                            }, 3000);
+                        })();
+                    },
+                    async getStatus(payId) {
+                        let res = await this.$fetch({
+                            url: `/api/app/pay/getStatus/${payId}`,
+                            method: 'GET',
+                        });
+                        if (res.code == 200) return res.data;
+                        return {
+                            status: 0,
+                        };
+                    },
+                    download(event) {
+
+                    }
+                },
+                computed: {
+                    orderId() {
+                        return query().orderId;
+                    },
+                    query() {
+                        let q = util.query();
+                        console.log("...........q", q);
+                        return q;
+                    }
+                },
+                watch: {
+                    payment(v) { }
+                }
+            });
+            function query() {
+                let squery = location.search.replace(/^\?\s*/, '').split(/&|&amp;/g);
+                let map = {};
+                squery.forEach((part, i) => {
+                    let kv = part.split("=");
+                    let key = kv[0].trim();
+                    let value = decodeURIComponent((kv[1] || '').trim());
+                    map[key] = value;
+                });
+                return map;
+            }
+            function toParamsString(query) {
+                let s = [];
+                for (let key in query) {
+                    s.push(key + "=" + encodeURIComponent(query[key]));
+                }
+                location.search = "?" + s.join('&');
+            }
+            function paymentPage(params) {
+                let v = "https://www.light-network.net/public/payment.html?t="+Date.now();
+                //let v = "https://192.168.1.102:8081/public/payment.html?t=" + Date.now();
+                for (let key in params) {
+                    v += "&" + key + "=" + encodeURIComponent(params[key])
+                }
+                return v;
+            }
+            function download(content, filename) {
+                if (!content || !filename) return;
+                // 创建隐藏的可下载链接
+                var eleLink = document.createElement('a');
+                eleLink.download = filename;
+                eleLink.style.display = 'none';
+                // 字符内容转变成blob地址
+                var blob = new Blob([content]);
+                eleLink.href = URL.createObjectURL(blob);
+                // 触发点击
+                document.body.appendChild(eleLink);
+                eleLink.click();
+                // 然后移除
+                document.body.removeChild(eleLink);
+            };
+        })();
+
+
+    </script>
+
+</body>
+
+</html>
