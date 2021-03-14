@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Accept a card payment</title>
+    <meta name="description" content="A demo of a card payment on Stripe" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://js.stripe.com/v3/"></script>
+    <!--script src="./client.js" defer></script-->
+
+</head>
+
+<body>
+
+</body>
+<script type="text/javascript">
+    (() => {
+        function parseQuery() {
+            let q = location.search.replace(/^\s*\?/, '');
+            let list = (q || '').split(/(&)|(^&amp;)/);
+            let map = {};
+            list.forEach(s => {
+                let kv = (s || '').split('=');
+                if (!kv[0]) return;
+                map[kv[0]] = decodeURIComponent(kv[1]);
+            });
+            return map;
+        }
+        function submit(data) {
+            if(!data.pubKey || !data.clientSecret) {
+                console.error("clientSecret is null");
+                parent.postMessage({
+                    type: 'analytics', 
+                    data: {
+                        event: 'log',
+                        message: "stripe pay  pubKey or clientSecret is null",
+                        info: data,
+                    }
+                });
+                return;
+            }
+            var stripe = Stripe(data.pubKey);
+            //var elements = stripe.elements();
+            let clientSecret = data.clientSecret;
+            // Set the clientSecret here you got in Step 2
+            stripe
+                .confirmAlipayPayment(clientSecret, {
+                    // Return URL where the customer should be redirected to after payment
+                    return_url: location.protocol+'//'+location.host +`/notify.html`,
+                })
+                .then((result) => {
+                    if (result.error) {
+                        // Inform the customer that there was an error.
+                        //var errorElement = document.getElementById("error-message");
+                        // errorElement.textContent = result.error.message;
+                        parent.postMessage(
+                            {
+                                type: 'notify',
+                                message: result.error.message,
+                            },
+                            '*',
+                        );
+                    }
+                });
+        }
+        let query = parseQuery();
+        submit(query);
+    })();
+
+
+</script>
+
+</html>
