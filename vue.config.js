@@ -1,6 +1,6 @@
 const path = require('path');
 const { Command } = require('commander');
-const ChangeResultPlugin = require('./build/plugs/change.result.plugin');
+//const ChangeResultPlugin = require('./build/plugs/change.result.plugin');
 const webpack = require('webpack');
 const pack = require('./package.json');
 const fs = require('fs');
